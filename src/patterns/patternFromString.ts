@@ -28,9 +28,9 @@ function getXValues(row: string): number[] {
 }
 
 function getYValues(row: number[], yValue: number): Pattern {
-  return row.map((xValue) => [xValue, yValue]);
+  return row.map((xValue) => [yValue, xValue]);
 }
 
-function addXY([x, y]: number[], arrayOfXYs: Pattern): Pattern {
-  return arrayOfXYs.map(([x2, y2]) => [x + x2, y + y2]);
+function addXY([y, x]: number[], arrayOfXYs: Pattern): Pattern {
+  return arrayOfXYs.map(([y2, x2]) => [y + y2, x + x2]);
 }

@@ -1,65 +1,172 @@
 import {
-  children,
   createSignal,
-  type Accessor,
+  createMemo,
+  batch,
+  createEffect,
+  onCleanup,
   type JSX,
   type Setter,
+  type Accessor,
+  type Signal,
 } from "solid-js";
-import { getNextGeneration } from "../nextGeneration";
-import { patternSwitch } from "../patterns/patterns";
+import { methuselahs } from "../patterns/methuselahs";
+import { oscillators } from "../patterns/oscillators";
+import { spaceships } from "../patterns/spaceships";
+import { stillLives } from "../patterns/stillLives";
 import { For } from "solid-js/web";
+import { setNextGeneration, setCellAlive } from "../nextGeneration";
 
-export type Matrix = boolean[][];
+const patternSwitch = {
+  ...methuselahs,
+  ...oscillators,
+  ...spaceships,
+  ...stillLives,
+};
+
+export type Matrix = Signal<boolean>[][];
 
 export type Point = [number, number];
 
 type PatternName = keyof typeof patternSwitch;
 
-export const initialMatrix: Matrix = Array(32)
+type CellSignalTuple = [Signal<boolean>, Signal<boolean>];
+
+const matrix: CellSignalTuple[][] = Array(128)
   .fill(null)
-  .map(() => Array(32).fill(false));
+  .map(() =>
+    Array(192)
+      .fill(null)
+      .map(() => [createSignal<boolean>(false), createSignal<boolean>(false)])
+  );
 
 const initialPattern = "r-pentomino";
 
 export function GameOfLife() {
   const [isRunning, setIsRunning] = createSignal(false);
-  const [matrix, setMatrix] = createSignal<Matrix>(initialMatrix);
   const [pattern, setPattern] = createSignal<PatternName>(initialPattern);
 
-  setInterval(() => {
-    if (isRunning()) {
-      setMatrix(getNextGeneration(matrix(), "torus"));
+  const applyPattern = createMemo(() => {
+    return (x: number, y: number) => {
+      const patternFn = patternSwitch[pattern()].function;
+      const patternPoints = patternFn([y, x]);
+      const aliveMatrix = matrix.map((row) => row.map((cell) => cell[0]));
+      batch(() => {
+        patternPoints.forEach((point) => {
+          setCellAlive(aliveMatrix, point);
+        });
+      });
+    };
+  });
+
+  const memoizedApplyPattern = applyPattern();
+
+  let lastPreviewed: [number, number][] = [];
+
+  const handleHover = (x: number, y: number) => {
+    // Clear only the last previewed cells
+    for (let [py, px] of lastPreviewed) {
+      if (matrix[py] && matrix[py][px]) {
+        const [_, [getPreview, setPreview]] = matrix[py][px];
+        if (getPreview()) setPreview(false);
+      }
     }
-  }, 5);
+    lastPreviewed = [];
+    if (x === -1) return; // No preview if not hovering
+
+    const patternFn = patternSwitch[pattern()].function;
+    const points = patternFn([y, x]);
+    for (let [py, px] of points) {
+      if (matrix[py] && matrix[py][px]) {
+        const [_, [getPreview, setPreview]] = matrix[py][px];
+        if (!getPreview()) setPreview(true);
+        lastPreviewed.push([py, px]);
+      }
+    }
+  };
+
+  let frameId: number | null = null;
+
+  createEffect(() => {
+    if (!isRunning()) {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+        frameId = null;
+      }
+      return;
+    }
+
+    let lastTime = performance.now();
+    const frameInterval = 1000 / 25; // 10 FPS
+    const aliveMatrix = matrix.map((row) => row.map((cell) => cell[0]));
+
+    function gameLoop(currentTime: number) {
+      if (!isRunning()) return;
+      const deltaTime = currentTime - lastTime;
+      if (deltaTime >= frameInterval) {
+        batch(() => {
+          setNextGeneration(aliveMatrix, "torus");
+        });
+        lastTime = currentTime;
+      }
+      frameId = requestAnimationFrame(gameLoop);
+    }
+
+    frameId = requestAnimationFrame(gameLoop);
+
+    onCleanup(() => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+        frameId = null;
+      }
+    });
+  });
+
   return (
-    <main class="flex">
-      <aside>
-        <For each={Object.keys(patternSwitch)}>
-          {(pattern) => (
-            <PatternButton
-              pattern={pattern as PatternName}
-              setPattern={setPattern}
-            >
-              {patternSwitch[pattern as PatternName].string
-                .split("\n")
-                .map((line) => (
-                  <div>{line}</div>
-                ))}
-            </PatternButton>
-          )}
-        </For>
+    <main class="flex gap-4">
+      <aside class="flex flex-col gap-4 items-center overflow-y-auto h-[640px] no-scrollbar">
+        <h2 class="text-xl font-bold">Patterns</h2>
+        <PatternButtonGroup
+          patternObjects={methuselahs}
+          groupName="Methuselahs"
+          setPattern={setPattern}
+          pattern={pattern}
+        />
+        <PatternButtonGroup
+          patternObjects={oscillators}
+          groupName="Oscillators"
+          setPattern={setPattern}
+          pattern={pattern}
+        />
+        <PatternButtonGroup
+          patternObjects={spaceships}
+          groupName="Spaceships"
+          pattern={pattern}
+          setPattern={setPattern}
+        />
+        <PatternButtonGroup
+          patternObjects={stillLives}
+          groupName="Still Lives"
+          pattern={pattern}
+          setPattern={setPattern}
+        />
       </aside>
       <div>
-        <For each={matrix()}>
+        <For each={matrix}>
           {(row, y) => (
-            <Row
-              matrix={matrix()}
-              row={row}
-              y={y()}
-              setMatrix={setMatrix}
-              pattern={pattern}
-              setPattern={setPattern}
-            />
+            <div class="flex">
+              <For each={row}>
+                {(cell, x) => (
+                  <Cell
+                    aliveSignal={cell[0]}
+                    previewSignal={cell[1]}
+                    x={x()}
+                    y={y()}
+                    onCellChange={memoizedApplyPattern}
+                    onHover={handleHover}
+                  />
+                )}
+              </For>
+            </div>
           )}
         </For>
         <button onClick={() => setIsRunning(!isRunning())}>
@@ -70,82 +177,140 @@ export function GameOfLife() {
   );
 }
 
-function toggleCell(matrix: Matrix, position: Point): Matrix {
-  const [x, y] = position;
-  return matrix.map((row, iy) =>
-    row.map((cell, ix) => (ix === x && iy === y ? !cell : cell))
-  );
-}
-
 type CellProps = {
-  isAlive: boolean;
-  position: Point;
-  matrix: Matrix;
-  setMatrix: Setter<Matrix>;
-  pattern: Accessor<PatternName>;
-  setPattern: Setter<PatternName>;
+  aliveSignal: Signal<boolean>;
+  previewSignal: Signal<boolean>;
+  x: number;
+  y: number;
+  onCellChange: (x: number, y: number) => void;
+  onHover: (x: number, y: number) => void;
 };
 
-function Cell({ isAlive, position, matrix, setMatrix, pattern }: CellProps) {
+function Cell({
+  aliveSignal,
+  previewSignal,
+  x,
+  y,
+  onCellChange,
+  onHover,
+}: CellProps) {
+  const [isAlive] = aliveSignal;
+  const [isPreview] = previewSignal;
+  const state = createMemo(() => {
+    if (isPreview()) return "preview";
+    return isAlive() ? "alive" : "dead";
+  });
+
+  const buttonStyle = createMemo(() => ({
+    "background-color":
+      state() === "preview"
+        ? "lightblue"
+        : state() === "alive"
+        ? "black"
+        : "white",
+  }));
+
+  const handleMouseEnter = () => {
+    onHover(x, y);
+  };
+  const handleMouseLeave = () => {
+    onHover(-1, -1);
+  };
+  const handleMouseDown = () => onCellChange(x, y);
+
   return (
     <button
-      style={{ "background-color": isAlive ? "black" : "white" }}
-      class="w-5 h-5 p-0 m-0"
-      aria-label={`Cell at ${position[0]},${position[1]} Click to toggle`}
-      onClick={() => {
-        console.log("pattern", pattern());
-        const patternFn = patternSwitch[pattern()].function;
-        const patternPoints = patternFn(position);
-        console.log("patternPoints", patternPoints);
-        const newMatrix = patternPoints.reduce((acc, point) => {
-          return toggleCell(acc, point);
-        }, matrix);
-        setMatrix(newMatrix);
-      }}
+      style={buttonStyle()}
+      class="w-2 h-2 p-0 m-0"
+      aria-label={`Click to toggle`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onMouseDown={handleMouseDown}
     />
   );
 }
 
-type RowProps = {
-  matrix: Matrix;
-  row: boolean[];
-  y: number;
-  setMatrix: Setter<Matrix>;
-  pattern: Accessor<PatternName>;
-  setPattern: Setter<PatternName>;
-};
-
-function Row({ matrix, row, y, setMatrix, pattern, setPattern }: RowProps) {
-  return (
-    <div class="flex">
-      {row.map((isAlive, ix) => (
-        <Cell
-          isAlive={isAlive}
-          position={[ix, y]}
-          matrix={matrix}
-          setMatrix={setMatrix}
-          pattern={pattern}
-          setPattern={setPattern}
-        />
-      ))}
-    </div>
-  );
-}
 type PatternButtonProps = {
   pattern: PatternName;
+  isActive: Accessor<boolean>;
   setPattern: Setter<PatternName>;
   children: JSX.Element;
 };
 
-function PatternButton({ pattern, setPattern, children }: PatternButtonProps) {
-  return (
+function PatternButton({
+  pattern,
+  setPattern,
+  children,
+  isActive,
+}: PatternButtonProps) {
+  return createMemo(() => (
     <button
-      class="font-mono leading-none p-4"
+      class={`font-mono leading-none p-4 border rounded-md w-fit ${
+        isActive() ? "border-gray-300" : "border-gray-600 hover:border-gray-400"
+      }`}
       onClick={() => {
         setPattern(pattern);
       }}
     >
       {children}
     </button>
+  ))();
+}
+
+type Pattern = {
+  [key: string]: {
+    string: string;
+    function: (position: Point) => Point[];
+  };
+};
+
+type PatternButtonGroupProps = {
+  patternObjects: Pattern;
+  groupName: "Methuselahs" | "Oscillators" | "Spaceships" | "Still Lives";
+  setPattern: Setter<PatternName>;
+  pattern: Accessor<PatternName>;
+};
+
+function PatternButtonGroup({
+  patternObjects,
+  groupName,
+  setPattern,
+  pattern,
+}: PatternButtonGroupProps) {
+  return (
+    <>
+      <h3 class="text-md font-bold">{groupName}</h3>
+      <ul class="flex flex-col gap-2">
+        <For each={Object.keys(patternObjects)}>
+          {(patternName) => (
+            <li class="flex flex-col gap-2 text-center items-center">
+              <h4 class="text-md">{patternName}</h4>
+              <PatternButton
+                pattern={patternName as PatternName}
+                setPattern={setPattern}
+                isActive={createMemo(() => patternName === pattern())}
+              >
+                {patternObjects[patternName as keyof Pattern].string
+                  .split("\n")
+                  .map((line) => (
+                    <div>{line}</div>
+                  ))}
+              </PatternButton>
+            </li>
+          )}
+        </For>
+      </ul>
+    </>
   );
+}
+
+function getCellState(
+  y: number,
+  x: number,
+  previewSet: Set<string>,
+  cellSignal: Signal<boolean>
+): "preview" | "alive" | "dead" {
+  if (previewSet.has(`${y},${x}`)) return "preview";
+  const [isAlive] = cellSignal;
+  return isAlive() ? "alive" : "dead";
 }

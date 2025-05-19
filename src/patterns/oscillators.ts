@@ -44,6 +44,27 @@ OOO...
 ...OOO
 ...OOO`;
 
+export const toad = `..O.
+O.O.
+O..`;
+export const beacon = `OO..
+OO..
+..OO
+..OO`;
+export const pulsar = `..OOO...OOO..
+.............
+O....O.O....O
+O....O.O....O
+O....O.O....O
+..OOO...OOO..
+.............
+..OOO...OOO..
+O....O.O....O
+O....O.O....O
+O....O.O....O
+.............
+..OOO...OOO..`;
+
 export const oscillators = {
   blinker: {
     string: blinker,
@@ -69,4 +90,7 @@ export const oscillators = {
     string: figure8,
     function: patternFromString(figure8),
   },
+  toad: { string: toad, function: patternFromString(toad) },
+  beacon: { string: beacon, function: patternFromString(beacon) },
+  pulsar: { string: pulsar, function: patternFromString(pulsar) },
 };

@@ -69,8 +69,12 @@ const lidka = `..........OOO..
 O.O............
 .O.............`;
 
+const diehard = `......O.
+OO......
+.OO...OO`;
+
 export const methuselahs = {
-  rPentomino: {
+  "r-pentomino": {
     string: rPentomino,
     function: patternFromString(rPentomino),
   },
@@ -97,5 +101,9 @@ export const methuselahs = {
   lidka: {
     string: lidka,
     function: patternFromString(lidka),
+  },
+  diehard: {
+    string: diehard,
+    function: patternFromString(diehard),
   },
 };

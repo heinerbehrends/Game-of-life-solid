@@ -29,6 +29,11 @@ OO.OOO.
 .O.O...
 ..O....`;
 
+export const loaf = `.OO.
+O..O
+.O.O
+..O.`;
+
 export const stillLives = {
   block: { function: patternFromString(block), string: block },
   beehive: { function: patternFromString(beehive), string: beehive },
@@ -36,4 +41,5 @@ export const stillLives = {
   boat: { function: patternFromString(boat), string: boat },
   fishhook: { function: patternFromString(fishhook), string: fishhook },
   eater2: { function: patternFromString(eater2), string: eater2 },
+  loaf: { function: patternFromString(loaf), string: loaf },
 };
