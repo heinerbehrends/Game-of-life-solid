@@ -303,14 +303,3 @@ function PatternButtonGroup({
     </>
   );
 }
-
-function getCellState(
-  y: number,
-  x: number,
-  previewSet: Set<string>,
-  cellSignal: Signal<boolean>
-): "preview" | "alive" | "dead" {
-  if (previewSet.has(`${y},${x}`)) return "preview";
-  const [isAlive] = cellSignal;
-  return isAlive() ? "alive" : "dead";
-}
